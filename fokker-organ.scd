@@ -1,107 +1,115 @@
-~view = 1;
-~legato = ();
-~root = ();
-10.do{|l| ~legato[l+1] = 1};
-~chn = ();
-10.do{|ch| ~chn[ch+1] = ch};
-
-10.do{|t| ~root[t+1] = 0};
-
-t.tempo_(30/60);
-
-(
-OSCdef(\ckar, {arg msg;
-msg.removeAt(0);
-msg.do{|contents, i|
-		{
-		var tree = contents.asString.findRegexpAt("[0-9]")[0].asInteger;
-		var seq = contents.asString.findRegexpAt("[0-9]+", 2);
-		var shape = contents.asString.findRegexp("S.")[0][1].findRegexp("[0-9]")[0][1].asInteger;
-		var gen = contents.asString.findRegexp("G.*S")[0][1].findRegexp("[0-9]+")[0][1].asInteger;
-		var leaves = seq[1].asInteger;
-		var offset=36;
-		var list=[];
-		var pattern;
-		var notes = [];
-		var subdiv;
-		// ("contents in " ++ contents).postln;
-		seq = seq[0].findRegexp("[0-9]").flop.at(1).asInteger;
-		("******************************").postln;
-		("******************************").postln;
-		("tree: " ++ tree).postln;
-		("contents: " ++ contents).postln;
-		("seq: " ++ seq).postln;
-		("leaves: " ++ leaves).postln;
-		("shape: " ++ shape).postln;
-		("gen: " ++ gen).postln;
-
-		pattern = seq.collect{ arg item,index;
-			if (item == 0) {
-				0;
-			} {
-				if ((~chn[tree] >= 3) && (~chn[tree] <= 5)) {
-					/*				if (gen < 5) {
-					item + 35;
-					} {*/
-					(item + (gen-1)) + 37;
-					// }
-
-				} {
-					(item*4) + (gen*4) + 35;
-				}
-			}
-		};
-
-		pattern.postln;
-		// pattern.collect{|e| notes.add(e.midiname)};
-		// notes.postln;
-
-		if (seq.size > 4) {
-			subdiv = shape+(seq.size-1).clip(0,8);
-		} {
-			subdiv = shape;
-		};
-
-		("channel: " ++ ~chn[tree]).postln;
-		Pdef(("fokker_"++~chn[tree]).asSymbol, {Pbind(\dur, Pseq([1/subdiv], inf), \stepsPerOctave, 31, \midinote, Pseq(pattern, inf), \ctranspose, Pfunc{~root[tree]},\legato, Pfunc{~legato[tree]}, \chan, Pfunc{~chn[tree]}, \type, \midi, \midiout, m)}).play;
-		}.fork;
-	} // iteration loop
-}, 'ckartree');
-
-OSCdef(\ckar1, {arg msg;
-	("VIEW: " + msg[1]).postln;
-	~view = msg[1].asInteger;
-}, 'ckartreeview');
+t = TempoClock.default;
+t.tempo_(120/60);
 
 
-OSCdef(\ckar3, {arg msg;
-var key = msg[1].asString.split($,);
-var tree = key[0].findRegexpAt("[0-9]+")[0];
-var keyval = key[0].findRegexp("[a-z]+")[0][1];
+// globals
 
-	// key.postln;
-	// tree.postln;
-	// keyval.postln;
-	// msg.postln;
+~notes = (62..86);
+~legato = 0.2;
+~events = (notes:List.new, durs: List.new);
 
-	if (keyval == "speed") {
-/*		msg[2].postln;*/
-		// ~legato = msg[2].clip(0.1, 4);
-		~legato[tree.asInteger] = msg[2].linlin(0.06, 1.5, 0.1, 4);
-		~legato[tree.asInteger].postln;
-		}
-
-}, 'ckarvalue');
+// tests
+~f = { arg notes, dur, legato, transpose;
+	Pdef(("fokker_2").asSymbol, { Pbind(\dur, Pseq(dur, inf), \stepsPerOctave, 31, \midinote, Pseq(notes, inf), \ctranspose, Pfunc{transpose}, \legato, Pfunc{legato}, \chan, Pseq([0,1,2].stutter(3), inf), \type, \midi, \midiout, m)}).play;
+};
 
 
-OSCdef(\ckar2, {arg msg;
-			var key = msg[1].asString.split($,);
-			var tree = key[0].findRegexpAt("[0-9]+")[0];
-			var root = msg[2];
-
-	~root[tree.asInteger] = root.asInteger;
-			msg.postln;
-}, 'ckartreetransform');
+Pdef("fokker_2".asSymbol).stop;
 
 
-);
+// MIDI samples read
+~path = thisProcess.nowExecutingPath.dirname ++ "/files/";
+~fantasia = SimpleMIDIFile.read(~path ++ "i1.MID");
+
+~fantasia.tempo = 70
+( ~fantasia.p <> (type: \midi, midiout: m) ).play
+Pdef(\fe, Ppar([( ~fantasia.p <> (type: \midi, midiout: m) )], inf) ).play;
+
+Pdef(("fokker_b").asSymbol, { Pbind(\dur, Pseq([1], inf), \stepsPerOctave, 31, \midinote, Pseq(["d1".namecps, "f1".namecps]/2, inf), \ctranspose,0, \legato, 1, \chan, Pseq([4], inf), \type, \midi, \midiout, m)}).play;
+
+a = ~fantasia.generatePatternSeqs;
+
+a.collect{|e|
+	~events['notes'].add(e[0]);
+	~events['durs'].add(e[1]);
+};
+
+~f.(~notes, [1/4], 0.2, 0);
+
+
+Pdef(("fokker_b").asSymbol, { Pbind(\dur, Pseq([1], inf), \stepsPerOctave, 31, \midinote, Pseq(["d1".namecps, "f1".namecps]/2, inf), \ctranspose,0, \legato, 1, \chan, Pseq([4], inf), \type, \midi, \midiout, m)}).play;
+
+Pdef("fokker_2".asSymbol).stop;
+
+p = ~fantasia.p.play;
+p.stop;
+
+~allOpen.();
+
+~notesOff.();
+
+~allClose.();
+
+
+
+
+/// melodie omhoog en omlaag.
+
+/// 55-70
+Pdef(("up").asSymbol, { Pbind(\dur, Pseq([2], inf), \stepsPerOctave, 31, \midinote, Pseq(["a1".namemidi, "B1".namemidi, "c2".namemidi, "d2".namemidi, "e2".namemidi], inf), \ctranspose,0, \legato, 1, \chan, Pseq([4], inf), \type, \midi, \midiout, m)}).play;
+
+
+Pdef("up".asSymbol).stop;
+
+
+
+/// machine sounds (v1)
+Pdef(\m, { Pbind(\dur, 1 \stepsPerOctave, 31, \midinote, Pseq((45..97), inf), \ctranspose,0, \legato, 0.4, \chan, Pseq([0,1,2], inf), \type, \midi, \midiout, m)}).play;
+Pdef(\m3, { Pbind(\dur, 1, \stepsPerOctave, 31, \midinote, Pwhite((75..91), inf), \ctranspose,0, \legato, 0.4, \chan, Pseq([7,8,9], inf), \type, \midi, \midiout, m)}).play;
+Pdef(\mb, { Pbind(\dur, 1, \stepsPerOctave, 31, \midinote, Pwhite((36..45), inf), \ctranspose,0, \legato, 0.4, \chan, Pseq([5,4,6], inf), \type, \midi, \midiout, m)}).play;
+
+Pdef.all.do{|p| p.stop;}
+
+
+// rain
+Pdef(\regen, { Pbind(\dur, 1/32, \stepsPerOctave, 31, \midinote, Pwhite(46, 51, inf), \ctranspose,0, \legato, 3, \chan, Pwhite(0,4, inf), \type, \midi, \midiout, m) }).play;
+Pdef(\regenb, { Pbind(\dur, 2, \stepsPerOctave, 31, \midinote, 36, \ctranspose,0, \legato, 1, \chan, 6, \type, \midi, \midiout, m) }).play;
+Pdef(\wind, { Pbind(\dur, Pseq([1/23], inf), \stepsPerOctave, 31, \midinote, Pseq((56..89).mirror, inf), \ctranspose,0, \legato, 1, \chan, Pseq([0,1,2], inf), \type, \midi, \midiout, m)}).stop;
+
+
+
+// reverb:
+Ndef(\s, {GVerb.ar(SoundIn.ar(0,1),100,8)*0.7}).play(0,2);
+
+// rap:
+Ndef(\s, {GVerb.ar(SoundIn.ar(0,1),100,0.1)*0.7}).play(0,2).stop;
+
+// moment supreme
+Pdef("machine".asSymbol, { Pbind(\dur, Pseq([1/1], 2), \stepsPerOctave, 31, \midinote, Pseq(["d5".namemidi], inf), \ctranspose,0, \legato, 0.2, \chan, Pseq([2], inf), \type, \midi, \midiout, m)}).play;
+Pdef("machine".asSymbol, { Pbind(\dur, Pseq([1/1], inf), \stepsPerOctave, 31, \midinote, Pseq(["d1".namemidi, "eb1".namemidi], inf), \ctranspose,0, \legato, 0.8, \chan, Pseq([2], inf), \type, \midi, \midiout, m)}).play;
+Pdef("machineCue".asSymbol, { Pbind(\dur, Pseq([8/1], inf), \stepsPerOctave, 31, \midinote, Pseq(["d4".namemidi], inf), \ctranspose,0, \legato, 0.05, \chan, Pseq([2], inf), \type, \midi, \midiout, m)}).play;
+
+Pdef(\machine2, { Pbind(\dur, Pseq([1/1], inf), \stepsPerOctave, 31, \midinote, Pseq(["a1".namemidi, "B1".namemidi, "c2".namemidi], inf), \ctranspose,0, \legato, 0.4, \chan, Pseq([2], inf), \type, \midi, \midiout, m)}).play;
+}, '/2/push2');
+
+Pdef(("machineSwing1").asSymbol, { Pbind(\dur, Pseq([1/8], inf), \stepsPerOctave, 31, \midinote, Pseq((36..91), inf), \ctranspose,0, \legato, 0.8, \chan, Pseq([0,1,2], inf), \type, \midi, \midiout, m)}).play;
+Pdef(("machineSwing").asSymbol, { Pbind(\dur, Pseq([1/8], inf), \stepsPerOctave, 31, \midinote, Pseq((56..91), inf), \ctranspose,0, \legato, 0.8, \chan, Pseq([0,1,2], inf), \type, \midi, \midiout, m)}).play;
+Pdef(("machineSwing3").asSymbol, { Pbind(\dur, Pseq([1/8], inf), \stepsPerOctave, 31, \midinote, Pseq((66..91), inf), \ctranspose,0, \legato, 0.8, \chan, Pseq([0,1,2], inf), \type, \midi, \midiout, m)}).play;
+}, '/2/push3');
+
+// normal tempo
+t.tempo_(115/60);
+
+// fast tempo
+t.tempo_(185/60);
+
+// magnetron ready
+{
+~allClose.();
+Ndef(\a, {PlayBuf.ar(2, ~buffers['cookies'].bufnum)*4}).play(0,2);
+Ndef(\m0).stop(1);
+Tdef(\a).stop;
+Pdef.all.do{|p| p.stop; }
+}.fork;
+
+
